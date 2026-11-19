@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Simulasi Robot Rumah</title>
+  <meta name="description" content="Simulasi agen robot pembersih berbasis aturan dengan manajemen baterai di tiga ruangan rumah.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Barlow+Semi+Condensed:wght@600&display=swap">
+  <link rel="stylesheet" href="css/styles.css">
+  <script type="module" src="js/ui.js"></script>
+</head>
+<body>
+  <a class="skip" href="#denah">Lewati ke denah</a>
+
+  <header class="topbar">
+    <h1>Simulasi Robot Pembersih Rumah</h1>
+    <div class="controls" role="group" aria-label="Kontrol simulasi">
+      <button type="button" id="btn-run" class="btn btn-primary" aria-keyshortcuts="Space">Jalankan</button>
+      <button type="button" id="btn-step" class="btn" aria-keyshortcuts="ArrowRight">Langkah berikutnya</button>
+      <button type="button" id="btn-reset" class="btn" aria-keyshortcuts="R">Reset</button>
+      <label class="speed">
+        <span>Kecepatan</span>
+        <input type="range" id="speed" min="1" max="20" step="1" value="1">
+        <output id="speed-out" for="speed">1x</output>
+      </label>
+      <p class="run-state" id="run-state">Dijeda</p>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="floor-area" aria-labelledby="denah-title">
+      <h2 id="denah-title" class="visually-hidden">Denah rumah</h2>
+      <div class="plan" id="denah" tabindex="-1">
+        <svg class="trail" id="trail" aria-hidden="true"></svg>
+        <div class="rooms" id="rooms"></div>
+        <button type="button" class="robot" id="robot" aria-describedby="robot-help">
+          <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+            <g class="brush"><circle cx="13" cy="13" r="2"/><path d="M13 5v16M5 13h16M7.5 7.5l11 11M18.5 7.5l-11 11"/></g>
+            <g class="brush"><circle cx="51" cy="13" r="2"/><path d="M51 5v16M43 13h16M45.5 7.5l11 11M56.5 7.5l-11 11"/></g>
+            <rect x="6" y="14" width="8" height="36" rx="2" class="wheel"/>
+            <rect x="50" y="14" width="8" height="36" rx="2" class="wheel"/>
+            <circle cx="32" cy="32" r="22" class="body"/>
+            <path d="M14 22 A22 22 0 0 1 50 22" class="bumper"/>
+            <circle cx="32" cy="34" r="7" class="lens"/>
+          </svg>
+        </button>
+      </div>
+      <p class="hint" id="robot-help">Klik ruangan untuk menambah debu, Shift + klik atau klik kanan untuk mengurangi. Seret robot, atau fokuskan robot lalu tekan panah kiri/kanan, untuk memindahkannya.</p>
+
+      <form class="settings" id="settings" aria-labelledby="settings-title" novalidate>
+        <h2 id="settings-title">Pengaturan rumah</h2>
+        <div class="field">
+          <label for="preset">Keadaan awal</label>
+          <select id="preset"></select>
+        </div>
+        <div class="field">
+          <label for="seed">Seed acak</label>
+          <input id="seed" type="number" inputmode="numeric" min="0" max="4294967295" step="1" value="42" aria-describedby="seed-msg">
+          <p class="field-msg" id="seed-msg">Mengubah seed atau keadaan awal langsung me-reset simulasi.</p>
+        </div>
+        <div class="field">
+          <label for="dust">Laju debu per ruangan</label>
+          <div class="range-row">
+            <input id="dust" type="range" min="0" max="50" step="1" value="5">
+            <output id="dust-out" for="dust">5%</output>
+          </div>
+        </div>
+        <fieldset class="field">
+          <legend>Mode persepsi</legend>
+          <label class="radio"><input type="radio" name="mode" value="full" checked> Penuh: melihat debu semua ruangan</label>
+          <label class="radio"><input type="radio" name="mode" value="local"> Lokal: hanya ruangan sendiri, sisanya dari memori</label>
+        </fieldset>
+      </form>
+    </section>
+
+    <aside class="mind" aria-labelledby="mind-title">
+      <h2 id="mind-title">Isi kepala robot</h2>
+
+      <section class="battery" aria-labelledby="battery-title">
+        <div class="battery-head">
+          <h3 id="battery-title">Baterai</h3>
+          <p class="battery-value" id="battery-value">100%</p>
+        </div>
+        <div class="battery-bar" id="battery-bar">
+          <div class="battery-fill" id="battery-fill"></div>
+          <div class="return-mark" id="return-mark"><span id="return-label">batas pulang 5%</span></div>
+        </div>
+        <p class="battery-formula" id="battery-formula"></p>
+        <p class="battery-status" id="battery-status"></p>
+      </section>
+
+      <section aria-labelledby="percept-title">
+        <h3 id="percept-title">Percept</h3>
+        <dl class="percept" id="percept"></dl>
+      </section>
+
+      <section aria-labelledby="rules-title">
+        <h3 id="rules-title">Aturan (urut prioritas)</h3>
+        <ol class="rules" id="rules"></ol>
+      </section>
+
+      <section aria-labelledby="action-title" class="decision">
+        <h3 id="action-title">Aksi terpilih</h3>
+        <p class="action-name" id="action-name"></p>
+        <p class="action-reason" id="action-reason">Belum ada keputusan. Tekan Jalankan atau Langkah berikutnya.</p>
+      </section>
+    </aside>
+
+    <section class="chart-area" aria-labelledby="chart-title">
+      <h2 id="chart-title">Grafik baterai</h2>
+      <div class="chart" id="chart"></div>
+      <ul class="legend" aria-label="Keterangan grafik">
+        <li><span class="key key-battery" aria-hidden="true"></span>baterai</li>
+        <li><span class="key key-limit" aria-hidden="true"></span>batas pulang</li>
+        <li><span class="key key-charge" aria-hidden="true"></span>mengisi daya</li>
+      </ul>
+
+      <h2 id="metrics-title">Metrik</h2>
+      <dl class="metrics" id="metrics" aria-labelledby="metrics-title"></dl>
+    </section>
+
+    <section class="log-area" aria-labelledby="log-title">
+      <div class="log-head">
+        <h2 id="log-title">Log keputusan</h2>
+        <label class="inline-field">
+          <span>Aturan</span>
+          <select id="log-filter">
+            <option value="">semua</option>
+          </select>
+        </label>
+        <button type="button" class="btn" id="btn-export">Ekspor CSV</button>
+      </div>
+      <div class="log-scroll" tabindex="0" role="region" aria-label="Log keputusan, terbaru di atas, bisa digulir">
+        <ol class="log" id="log-body"></ol>
+        <p class="empty" id="log-empty">Belum ada keputusan. Tekan Jalankan atau Langkah berikutnya.</p>
+      </div>
+    </section>
+  </main>
+
+  <p class="visually-hidden" aria-live="polite" id="announce"></p>
+  <noscript><p class="noscript">Simulasi butuh JavaScript. Aktifkan JavaScript lalu muat ulang halaman.</p></noscript>
+</body>
+</html>

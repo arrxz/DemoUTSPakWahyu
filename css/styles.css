@@ -1,0 +1,688 @@
+/* Denah rumah ala gambar arsitek: dinding tinta, lantai per ruangan, zona kuning hanya untuk dok pengisian. */
+:root {
+  --beton: #E3E5E1;
+  --tinta: #26323B;
+  --biru: #2B63B8;
+  --kuning: #E2B01C;
+  --debu: #8C6A4A;
+  --merah: #B93A2E;
+
+  /* turunan dari token di atas, bukan warna baru */
+  --tinta-redup: color-mix(in srgb, var(--tinta) 80%, var(--beton)); /* ~6:1 di atas beton */
+  --garis-grid: color-mix(in srgb, var(--tinta) 12%, var(--beton));
+  --permukaan: color-mix(in srgb, var(--tinta) 5%, var(--beton));
+
+  --f-sign: "Barlow Semi Condensed", "Arial Narrow", sans-serif;
+  --f-body: "Atkinson Hyperlegible", system-ui, sans-serif;
+  --t-13: 0.8125rem;
+  --t-15: 0.9375rem;
+  --t-18: 1.125rem;
+  --t-24: 1.5rem;
+  --t-36: 2.25rem;
+
+  --r-room: 2px;
+  --r-btn: 6px;
+  --wall: 4px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { color-scheme: light; }
+
+body {
+  margin: 0;
+  background: var(--beton);
+  color: var(--tinta);
+  font-family: var(--f-body);
+  font-size: var(--t-15);
+  line-height: 1.5;
+}
+
+h1, h2, h3 {
+  font-family: var(--f-sign);
+  font-weight: 600;
+  line-height: 1.15;
+  margin: 0;
+}
+h1 { font-size: var(--t-24); }
+h2 { font-size: var(--t-18); }
+h3 { font-size: var(--t-15); }
+
+p { margin: 0; max-width: 70ch; }
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.skip {
+  position: absolute;
+  left: 8px; top: -60px;
+  background: var(--tinta);
+  color: var(--beton);
+  padding: 8px 12px;
+  border-radius: var(--r-btn);
+  z-index: 10;
+}
+.skip:focus { top: 8px; }
+
+/* Fokus: cincin biru tebal dengan celah beton supaya terlihat di atas warna apa pun. */
+:focus-visible {
+  outline: 3px solid var(--biru);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--beton);
+}
+
+button, select, summary, label[for], input[type="range"], input[type="radio"], .radio { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+
+/* ---------- Bilah atas ---------- */
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  padding: 16px clamp(16px, 3vw, 32px);
+  border-bottom: var(--wall) solid var(--tinta);
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn {
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 2px solid var(--tinta);
+  border-radius: var(--r-btn);
+  background: transparent;
+  color: var(--tinta);
+  font: 700 var(--t-15)/1.2 var(--f-body);
+}
+.btn:hover { background: var(--permukaan); }
+.btn:active { transform: translateY(1px); background: var(--garis-grid); }
+.btn:disabled { opacity: 0.6; }
+
+.btn-primary {
+  background: var(--biru);
+  border-color: var(--biru);
+  color: #fff;
+  min-width: 7.5em;
+}
+.btn-primary:hover { background: color-mix(in srgb, var(--biru) 85%, var(--tinta)); }
+.btn-primary:active { background: color-mix(in srgb, var(--biru) 70%, var(--tinta)); }
+
+.speed {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding-left: 8px;
+}
+.speed input { width: 110px; }
+output { font-variant-numeric: tabular-nums; font-weight: 700; min-width: 3ch; }
+
+input[type="range"] { accent-color: var(--biru); min-height: 44px; }
+
+.run-state {
+  font-weight: 700;
+  min-width: 6em;
+  padding-left: 8px;
+}
+.run-state[data-state="dead"] { color: var(--merah); font-size: var(--t-18); }
+
+/* ---------- Tata letak ---------- */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(300px, 2fr);
+  grid-template-areas:
+    "floor mind"
+    "chart log";
+  gap: 0;
+}
+.floor-area { grid-area: floor; }
+.mind { grid-area: mind; }
+.chart-area { grid-area: chart; }
+.log-area { grid-area: log; }
+
+.floor-area, .mind, .chart-area, .log-area {
+  padding: 20px clamp(16px, 3vw, 32px);
+  min-width: 0;
+}
+.mind, .log-area { border-left: var(--wall) solid var(--tinta); }
+.chart-area, .log-area { border-top: var(--wall) solid var(--tinta); }
+
+/* ---------- Denah rumah ---------- */
+.plan {
+  position: relative;
+  padding: 28px 20px 36px;
+  border-radius: var(--r-room);
+  touch-action: pan-y;
+}
+.plan:focus { outline: none; }
+
+/* Dinding luar rumah lebih tebal dari dinding dalam, seperti gambar denah arsitek. */
+.rooms {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.25fr var(--wall) 1fr var(--wall) 1.15fr;
+  align-items: stretch;
+  border: 6px solid var(--tinta);
+  border-radius: var(--r-room);
+  z-index: 1;
+}
+
+.room {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 2px;
+  min-height: 240px;
+  padding: 10px;
+  border: 0;
+  border-radius: 0;
+  background-color: var(--beton);
+  color: var(--tinta);
+  font: inherit;
+  text-align: left;
+  transition: background-color 150ms ease-out;
+}
+.room:focus-visible { outline-offset: -5px; }
+.room:hover { background-color: var(--permukaan); }
+.room:active { background-color: var(--garis-grid); }
+.room[data-drop="true"] { background-color: color-mix(in srgb, var(--biru) 12%, var(--beton)); }
+
+/* Lantai berbeda per ruangan: papan kayu, ubin dapur, karpet kamar. */
+.room[data-floor="wood"] {
+  background-image: repeating-linear-gradient(90deg, transparent 0 23px, var(--garis-grid) 23px 24px);
+}
+.room[data-floor="tile"] {
+  background-image:
+    linear-gradient(var(--garis-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--garis-grid) 1px, transparent 1px);
+  background-size: 26px 26px;
+}
+
+.room-name {
+  font-family: var(--f-sign);
+  font-weight: 600;
+  font-size: var(--t-18);
+  position: relative;
+  z-index: 3; /* di atas garis pintu */
+  background: var(--beton);
+  padding: 0 4px;
+  border-radius: var(--r-room);
+}
+.room-dust {
+  position: relative;
+  z-index: 3;
+  font-size: var(--t-13);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: var(--beton);
+  padding: 0 4px;
+  border-radius: var(--r-room);
+}
+
+.furniture, .dust-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+.furniture rect, .furniture circle, .furniture line {
+  fill: var(--permukaan);
+  stroke: var(--tinta-redup);
+  stroke-width: 1.5;
+}
+.furniture .rug { fill: none; stroke-dasharray: 4 3; }
+.furniture .line { fill: none; }
+.dust-layer circle { fill: var(--debu); }
+
+/* Dok pengisian: satu-satunya area kuning di rumah. */
+.station {
+  position: absolute;
+  left: 27%; right: 27%; bottom: 0;
+  height: 30%;
+  border: 3px solid var(--tinta);
+  border-bottom: 0;
+  border-radius: var(--r-room) var(--r-room) 0 0;
+  background: repeating-linear-gradient(-45deg, var(--kuning) 0 10px, color-mix(in srgb, var(--kuning) 55%, var(--beton)) 10px 20px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 4px;
+  gap: 4px;
+  pointer-events: none;
+}
+.station svg { width: 20px; height: 20px; flex: none; }
+.station span {
+  font-family: var(--f-sign);
+  font-weight: 600;
+  font-size: var(--t-13);
+  background: var(--kuning);
+  color: var(--tinta);
+  padding: 0 4px;
+  border-radius: var(--r-room);
+}
+
+/* Dinding dalam dengan celah pintu dan busur ayun daun pintu. */
+.wall {
+  position: relative;
+  background: var(--tinta);
+  z-index: 2;
+}
+.wall .gap, .front-door .gap {
+  position: absolute;
+  left: -1px; right: -1px;
+  top: calc(50% - 26px);
+  height: 52px;
+  background: var(--beton);
+}
+.door-swing {
+  position: absolute;
+  width: 52px; height: 52px;
+  overflow: visible;
+  pointer-events: none;
+}
+.wall .door-swing { right: 100%; top: calc(50% - 26px); }
+.door-swing .leaf { stroke: var(--tinta); stroke-width: 2.5; fill: none; }
+.door-swing .swing { stroke: var(--tinta); stroke-width: 1; stroke-dasharray: 3 3; fill: none; }
+
+.front-door {
+  position: absolute;
+  left: -6px; top: 18%;
+  width: 6px; height: 100px;
+  z-index: 2;
+  pointer-events: none;
+}
+.front-door .gap { top: 0; height: 52px; }
+.front-door .door-swing { left: 100%; top: 0; }
+
+/* Simbol jendela di dinding luar: dua garis tipis di celah dinding. */
+.window {
+  position: absolute;
+  top: -6px;
+  left: 30%;
+  width: 36%;
+  height: 6px;
+  background: var(--beton);
+  border-left: 2px solid var(--tinta);
+  border-right: 2px solid var(--tinta);
+  pointer-events: none;
+}
+.window::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; top: 2px;
+  border-top: 1px solid var(--tinta);
+}
+.window.side { top: 30%; left: auto; right: -6px; width: 6px; height: 34%; border: 0; border-top: 2px solid var(--tinta); border-bottom: 2px solid var(--tinta); }
+.window.side::after { top: 0; bottom: 0; left: 2px; right: auto; border-top: 0; border-left: 1px solid var(--tinta); }
+
+.trail {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+  overflow: visible;
+}
+.trail line { stroke: var(--biru); stroke-width: 2; stroke-linecap: round; }
+
+.robot {
+  position: absolute;
+  top: 0; left: 0;
+  width: 56px; height: 56px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  z-index: 3;
+  touch-action: none;
+}
+.robot svg {
+  width: 100%; height: 100%; display: block;
+}
+.robot .brush path { stroke: var(--tinta); stroke-width: 1.5; stroke-linecap: round; }
+.robot .brush circle { fill: var(--tinta); }
+.robot .brush { transform-box: fill-box; transform-origin: center; }
+.robot .body { fill: var(--biru); stroke: var(--tinta); stroke-width: 3; }
+.robot .wheel { fill: var(--tinta); }
+.robot .bumper { fill: none; stroke: var(--beton); stroke-width: 3; }
+.robot .lens { fill: var(--beton); stroke: var(--tinta); stroke-width: 2; }
+.robot:hover .body { fill: color-mix(in srgb, var(--biru) 85%, var(--tinta)); }
+.robot.dragging { cursor: grabbing; }
+.robot[data-dead="true"] .body { fill: var(--tinta-redup); }
+.robot[data-charging="true"] .lens { fill: var(--kuning); }
+
+.hint {
+  margin-top: 10px;
+  font-size: var(--t-13);
+  color: var(--tinta-redup);
+}
+
+/* ---------- Pengaturan ---------- */
+.settings {
+  margin-top: 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px 24px;
+}
+.settings h2 { grid-column: 1 / -1; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; border: 0; padding: 0; margin: 0; }
+.field > label, legend { font-weight: 700; padding: 0; }
+.field select, .field input[type="number"], .inline-field select {
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 2px solid var(--tinta);
+  border-radius: var(--r-btn);
+  background: var(--beton);
+  color: var(--tinta);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  max-width: 100%;
+}
+.field input[aria-invalid="true"] { border-color: var(--merah); border-width: 3px; }
+.field-msg { font-size: var(--t-13); color: var(--tinta-redup); }
+.field-msg[data-error="true"] { color: var(--tinta); font-weight: 700; }
+.field-msg[data-error="true"]::before { content: "Galat: "; color: var(--merah); }
+.range-row { display: flex; align-items: center; gap: 10px; }
+.range-row input { flex: 1; min-width: 0; }
+.radio { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.radio input { width: 20px; height: 20px; accent-color: var(--biru); flex: none; }
+
+/* ---------- Isi kepala robot ---------- */
+.mind { display: flex; flex-direction: column; gap: 18px; }
+.mind h3 { margin-bottom: 6px; }
+
+.battery-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.battery-value {
+  font-size: var(--t-36);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.battery[data-critical="true"] .battery-value { color: var(--merah); }
+
+.battery-bar {
+  position: relative;
+  height: 36px;
+  margin-top: 8px;
+  border: 3px solid var(--tinta);
+  border-radius: var(--r-room);
+  background: var(--beton);
+}
+.battery-fill {
+  height: 100%;
+  width: 100%;
+  background: var(--biru);
+  transition: width 200ms linear;
+}
+.battery[data-critical="true"] .battery-fill { background: var(--merah); }
+.battery[data-charging="true"] .battery-fill {
+  /* garis miring menyatakan data: sedang mengisi */
+  background: repeating-linear-gradient(-45deg, var(--biru) 0 8px, color-mix(in srgb, var(--biru) 70%, var(--beton)) 8px 16px);
+}
+
+/* Penanda batas pulang: satu elemen yang boleh mencolok. Bergeser mengikuti jarak ke stasiun. */
+.return-mark {
+  position: absolute;
+  top: -12px; bottom: -12px;
+  left: 0;
+  width: 0;
+  border-left: 4px solid var(--kuning);
+  transition: left 400ms cubic-bezier(.3, 0, .2, 1);
+}
+.return-mark::before {
+  content: "";
+  position: absolute;
+  top: -2px; left: -10px;
+  border: 8px solid transparent;
+  border-top: 10px solid var(--tinta);
+}
+.return-mark span {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: -4px;
+  white-space: nowrap;
+  font-family: var(--f-sign);
+  font-weight: 600;
+  font-size: var(--t-13);
+  background: var(--kuning);
+  color: var(--tinta);
+  padding: 1px 6px;
+  border-radius: var(--r-room);
+  font-variant-numeric: tabular-nums;
+}
+.return-mark[data-flip="true"] span { left: auto; right: 0; }
+
+.battery-formula {
+  margin-top: 26px;
+  font-size: var(--t-13);
+  color: var(--tinta-redup);
+  font-variant-numeric: tabular-nums;
+}
+.battery-status:empty { display: none; }
+.battery-status {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border: 3px solid var(--merah);
+  border-radius: var(--r-room);
+  font-weight: 700;
+}
+.battery-status svg { width: 20px; height: 20px; flex: none; margin-top: 1px; }
+.battery-status[data-kind="charge"] { border-color: var(--kuning); }
+.battery-status[data-kind="dead"] { border-color: var(--merah); background: var(--permukaan); }
+
+.percept {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 12px;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.percept dt { color: var(--tinta-redup); }
+.percept dd { margin: 0; font-weight: 700; }
+
+.rules { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.rule {
+  display: grid;
+  grid-template-columns: 2.6em 1fr auto;
+  gap: 2px 8px;
+  padding: 6px 8px;
+  border: 2px solid transparent;
+  border-radius: var(--r-room);
+  color: var(--tinta-redup);
+}
+.rule-id { font-family: var(--f-sign); font-weight: 600; font-size: var(--t-18); line-height: 1.2; }
+.rule-name { font-weight: 700; }
+.rule-cond { grid-column: 2 / 4; font-size: var(--t-13); }
+.rule-status { font-size: var(--t-13); font-weight: 700; white-space: nowrap; }
+.rule[data-status="fired"] {
+  color: var(--tinta);
+  border-color: var(--tinta);
+  background: var(--permukaan);
+}
+.rule[data-status="fired"] .rule-id { color: var(--biru); }
+.rule[data-status="fired"] .rule-status { color: var(--biru); }
+.rule[data-status="skipped"] .rule-name { font-weight: 400; }
+
+.decision .action-name {
+  font-family: var(--f-sign);
+  font-weight: 600;
+  font-size: var(--t-24);
+}
+.action-reason { margin-top: 2px; }
+
+/* ---------- Grafik ---------- */
+.chart { margin-top: 10px; }
+.chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.chart .axis { stroke: var(--tinta); stroke-width: 2; }
+.chart .gridline { stroke: var(--garis-grid); stroke-width: 1; }
+.chart .label { fill: var(--tinta-redup); font: 12px var(--f-body); font-variant-numeric: tabular-nums; }
+.chart .battery-line { fill: none; stroke: var(--biru); stroke-width: 2.5; stroke-linejoin: round; }
+.chart .limit-line { fill: none; stroke: var(--tinta); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.chart .limit-band { fill: var(--kuning); opacity: 0.35; }
+.chart .charge-mark { fill: var(--kuning); stroke: var(--tinta); stroke-width: 1; }
+.chart .dead-mark { stroke: var(--merah); stroke-width: 3; }
+.chart .empty-text { fill: var(--tinta-redup); font: 15px var(--f-body); }
+
+.legend { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 0; margin: 10px 0 0; font-size: var(--t-13); }
+.legend li { display: flex; align-items: center; gap: 6px; }
+.key { display: inline-block; width: 22px; height: 0; }
+.key-battery { border-top: 3px solid var(--biru); }
+.key-limit { border-top: 2px dashed var(--tinta); }
+.key-charge { width: 10px; height: 10px; background: var(--kuning); border: 1px solid var(--tinta); }
+
+/* ---------- Log & metrik ---------- */
+.log-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.log-head h2 { margin-right: auto; }
+.inline-field { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+
+.log-scroll {
+  margin-top: 10px;
+  max-height: 420px;
+  overflow: auto;
+  border: 2px solid var(--tinta);
+  border-radius: var(--r-room);
+}
+.log { list-style: none; margin: 0; padding: 0; font-size: var(--t-13); }
+.log li { padding: 6px 10px; border-bottom: 1px solid var(--garis-grid); }
+.log-meta { display: flex; flex-wrap: wrap; gap: 0 12px; font-variant-numeric: tabular-nums; color: var(--tinta-redup); }
+.log-meta b { color: var(--tinta); font-family: var(--f-sign); font-weight: 600; font-size: var(--t-15); line-height: 1.2; }
+.log-meta span:first-of-type { color: var(--tinta); font-weight: 700; }
+.log li[data-rule="R2"] .log-meta b::before {
+  content: "";
+  display: inline-block;
+  width: 0; height: 0;
+  margin-right: 4px;
+  border: 5px solid transparent;
+  border-bottom: 8px solid var(--merah);
+  vertical-align: 1px;
+}
+.empty { padding: 14px 10px; color: var(--tinta-redup); }
+.empty[hidden] { display: none; }
+
+#metrics-title { margin-top: 20px; }
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px 20px;
+  margin: 10px 0 0;
+}
+.metrics div { border-top: 2px solid var(--tinta); padding-top: 4px; }
+.metrics dt { font-size: var(--t-13); color: var(--tinta-redup); }
+.metrics dd { margin: 0; font-size: var(--t-18); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.noscript { padding: 16px; font-weight: 700; }
+
+/* ---------- Urutan pembuka: robot masuk ke stasiun sekali saat halaman dimuat ---------- */
+@keyframes roll-in {
+  from { translate: -80px 0; }
+  to { translate: 0 0; }
+}
+.robot.intro { animation: roll-in 700ms cubic-bezier(.2, .7, .2, 1) both; }
+
+/* ---------- Layar sempit ---------- */
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "floor" "mind" "chart" "log";
+  }
+  .mind, .log-area { border-left: 0; }
+  .mind { border-top: var(--wall) solid var(--tinta); }
+}
+
+@media (max-width: 520px) {
+  .plan { padding: 16px 4px 24px; }
+  .room { min-height: 190px; padding: 5px; }
+  .room-name { font-size: var(--t-13); }
+  .furniture { opacity: 0.75; }
+  .robot { width: 40px; height: 40px; }
+  .station span { display: none; }
+  .speed input { width: 90px; }
+  h1 { font-size: var(--t-18); }
+}
+
+/* ---------- Micro animation ----------
+   Hanya reaksi atas aksi pengguna atau perubahan status robot. Tidak ada gerak dekoratif. */
+
+/* debu muncul dengan sedikit pantulan, hilang mengecil saat dibersihkan */
+.dust-layer circle {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(0);
+  transition: transform 160ms ease-in;
+}
+.dust-layer circle.on {
+  transform: scale(1);
+  transition: transform 260ms cubic-bezier(.3, 1.7, .5, 1);
+}
+
+/* klik ruangan: cincin biru singkat di dalam dinding sebagai tanda klik diterima */
+@keyframes tap-ring {
+  from { box-shadow: inset 0 0 0 5px var(--biru); }
+  to { box-shadow: inset 0 0 0 0 transparent; }
+}
+.room.tapped { animation: tap-ring 320ms ease-out; }
+
+/* sikat samping berputar hanya saat CLEAN */
+@keyframes spin { to { rotate: 360deg; } }
+.robot[data-action="CLEAN"] .brush { animation: spin 380ms linear infinite; }
+
+/* lensa berdenyut kuning saat mengisi daya */
+@keyframes charge-pulse { from { opacity: 1; } to { opacity: 0.45; } }
+.robot[data-charging="true"] .lens { animation: charge-pulse 700ms ease-in-out infinite alternate; }
+
+/* robot mati: satu goyangan, lalu diam */
+@keyframes dead-shake {
+  0%, 100% { translate: 0 0; }
+  25% { translate: -4px 0; }
+  75% { translate: 4px 0; }
+}
+.robot[data-dead="true"] svg { animation: dead-shake 300ms ease-in-out 2; }
+
+/* angka baterai sedikit membesar saat bertambah */
+@keyframes bump { 50% { scale: 1.08; } }
+.battery-value { transform-origin: right center; }
+.battery-value.bump { animation: bump 220ms ease-out; }
+
+/* kotak status kritis bergoyang sekali saat baru muncul */
+@keyframes nudge {
+  0%, 100% { translate: 0 0; }
+  30% { translate: -5px 0; }
+  60% { translate: 4px 0; }
+}
+.battery-status.nudge { animation: nudge 320ms ease-in-out; }
+
+/* aturan yang menyala berpindah sorotan dengan halus */
+.rule { transition: background-color 160ms ease-out, border-color 160ms ease-out, color 160ms ease-out; }
+
+/* baris log terbaru berkedip biru tipis */
+@keyframes fresh { from { background: color-mix(in srgb, var(--biru) 16%, var(--beton)); } to { background: transparent; } }
+.log li.fresh { animation: fresh 700ms ease-out; }
+
+.btn { transition: background-color 120ms ease-out, transform 80ms ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
